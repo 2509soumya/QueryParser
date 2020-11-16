@@ -32,13 +32,26 @@ public class QueryParser {
 	public static String unionregex="(?i)((UNION)|(UNION ALL))";
 	public static String aggregateProjection="(?i)((DISTINCT)|(TOP[\\s]+[0-9]+))[\\s]+";
 
-	public static String query="SELECT sales.* FROM product LEFT OUTER JOIN sales ON product_key = sales_product_key WHERE quantity > 10 AND product_name LIKE 'French%'";
+	//public static String query="SELECT sales.* FROM product LEFT OUTER JOIN sales ON product_key = sales_product_key WHERE quantity > 10 AND product_name LIKE 'French%'";
+	
+	public String query;
+	
+	public QueryParser(String query) {
+		this.query=query;
+	}
 	
 	public static void main(String[] args) throws Exception {
 		//Moving cursor implementation
+		  QueryParser parser=new QueryParser("");
+		  parser.parse();
+	}
+	
+	public JSONObject parse() {
+		JSONObject responseobject=new JSONObject();
+		JSONArray finaljsonarr=new JSONArray();
 		try {
 	    	query=query.trim();
-	    	JSONArray finaljsonarr=selectWithUnionParser();
+	    	finaljsonarr=selectWithUnionParser();
 			System.out.println("Final Json : "+finaljsonarr.toString());
 			System.out.println("Remaining query : "+query);
 			
@@ -50,10 +63,16 @@ public class QueryParser {
 		query=query.trim();
 		if(query.length()>0) {
 			System.out.println("Query Parsing failed !!!");
+			responseobject.put("message", "Query Parsing failed !!!");
+			responseobject.put("parseduntil", query);
 		}else {
 			System.out.println("Query Parsing succeeded !!!");
+			responseobject.put("parsedobject", finaljsonarr);
+			responseobject.put("message", "Successfully parsed query");
 		}
+		return responseobject;
 	}
+	
 	
 	/*
     public static String query="ITEM_COST  (FORMAT '-ZZ,ZZZ,ZZZ,ZZ9.9999999') (CHAR(23)) AS hbo";
@@ -102,7 +121,7 @@ public class QueryParser {
 		
 	}*/
 	
-	public static JSONArray selectWithUnionParser() throws Exception{
+	public JSONArray selectWithUnionParser() throws Exception{
 		JSONArray finaljsonarr=new JSONArray();
     	query=query.trim();
     	
@@ -133,7 +152,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONObject selectParser() throws Exception{
+	public JSONObject selectParser() throws Exception{
 		System.out.println("query: "+query);
 		JSONObject selecttree=new JSONObject();	
 		if(query.matches(select_pattern + "(.*)")) {
@@ -175,7 +194,7 @@ public class QueryParser {
 		return selecttree;
 	}
 	
-	public static JSONObject parseTableentity() throws Exception {
+	public JSONObject parseTableentity() throws Exception {
 		JSONObject entity_object=new JSONObject();
 		entity_object.put("type", "table");
 		
@@ -214,7 +233,7 @@ public class QueryParser {
 		return entity_object;
 	}
 	
-	public static JSONObject tableParser() throws Exception {
+	public JSONObject tableParser() throws Exception {
 		query=query.trim();
 		JSONObject tabobj=new JSONObject();
 		if(query.matches(tableentity_regex+ "(.*)")) {
@@ -238,7 +257,7 @@ public class QueryParser {
 		}
 		
 		query=query.trim();
-		if(query.matches("(?i)((WHERE)|(ON)|"+joinregex+")"+"(.*)")) {
+		if(query.matches("(?i)((WHERE[\\s]+)|(ON[\\s]+)|"+joinregex+")"+"(.*)")) {
 			System.out.println("where clause started");
 		}else {
 			query=" "+query;
@@ -266,7 +285,7 @@ public class QueryParser {
 		return tabobj;
 	}
 	
-	public static JSONArray tablejoinParser() throws Exception{
+	public JSONArray tablejoinParser() throws Exception{
 		query=query.trim();
 		
 		System.out.println("Table join parser- query : "+query);
@@ -319,7 +338,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONArray predicateParser() throws Exception{
+	public JSONArray predicateParser() throws Exception{
 		query=query.trim();
 		JSONArray conditionexpr_obj=new JSONArray();
 		
@@ -332,7 +351,7 @@ public class QueryParser {
 		return conditionexpr_obj;
 	}
 	
-	public static JSONArray aggregateProjection(JSONArray aggproj_arrobj) {
+	public JSONArray aggregateProjection(JSONArray aggproj_arrobj) {
 		query=query.trim();
 		JSONObject aggprojobj=new JSONObject();
 		Pattern aggproj_pattern=Pattern.compile("^"+aggregateProjection);
@@ -349,7 +368,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONObject aggregateParser(String aggfuncregex) throws Exception{
+	public JSONObject aggregateParser(String aggfuncregex) throws Exception{
 		query=query.trim();
 		
 		System.out.println("Query at aggregate parser: "+query);
@@ -400,7 +419,7 @@ public class QueryParser {
 		return agg_obj;
 	}
 	
-	public static JSONArray projectionParser() throws Exception{
+	public JSONArray projectionParser() throws Exception{
 		char separatingchar=',';
 		JSONArray colsArray=new JSONArray();
 		while(separatingchar==',') {
@@ -421,7 +440,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONObject expressionArgumentParser() throws Exception{
+	public JSONObject expressionArgumentParser() throws Exception{
 		JSONArray exprobj=new JSONArray();
 		JSONObject columndef_object=new JSONObject();
 		
@@ -522,7 +541,7 @@ public class QueryParser {
 		return columndef_object;
 	}
 	
-	public static JSONObject keywordParser() throws Exception {
+	public JSONObject keywordParser() throws Exception {
 		query=query.trim();
 		JSONObject obj_keyword=new JSONObject();
 		Pattern key_pattern=Pattern.compile(keywordregex);
@@ -538,8 +557,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONArray expressionParser(JSONArray expr_object) throws Exception{
-		
+	public JSONArray expressionParser(JSONArray expr_object) throws Exception{
 		query=query.trim();
 		
 		System.out.println("Query for expression parser:"+query);
@@ -624,7 +642,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONArray conditionParser(JSONArray conditionobj) throws Exception{
+	public JSONArray conditionParser(JSONArray conditionobj) throws Exception{
 		query=query.trim();
 		JSONArray exprobj=new JSONArray();		
 		JSONObject condition_operandobject=new JSONObject();	
@@ -725,7 +743,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONObject caseWhenargumentParser() throws Exception{
+	public JSONObject caseWhenargumentParser() throws Exception{
 		query=query.trim();
 		JSONObject finalexpr=new JSONObject();
 		finalexpr.put("expr", caseWhenParser());
@@ -746,7 +764,7 @@ public class QueryParser {
 		return finalexpr;
 	}
 	
-	public static JSONArray caseWhenParser() throws Exception {
+	public JSONArray caseWhenParser() throws Exception {
 		JSONArray casewhenexpr=new JSONArray();
 		System.out.println("Begin query: "+query);
 		if(query.matches(casewhen_regex+"(.*)")) {
@@ -801,7 +819,7 @@ public class QueryParser {
 	
 	
 	
-	public static JSONArray castParser() throws Exception{
+	public JSONArray castParser() throws Exception{
 		JSONObject finalexpr=new JSONObject();
 		query=query.replaceFirst("^(?i)(CAST[(])", "");
 		JSONArray exprobj=new JSONArray();
@@ -831,7 +849,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONObject funcParser(String type) throws Exception{
+	public JSONObject funcParser(String type) throws Exception{
 		JSONObject column_object=new JSONObject();	
 		Pattern expr_funcpattern=Pattern.compile(func_pattern);
 		Matcher matcher=expr_funcpattern.matcher(query);
@@ -864,7 +882,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONArray func_argumentParser(String functionname) throws Exception{
+	public JSONArray func_argumentParser(String functionname) throws Exception{
 		JSONArray argsArray=new JSONArray();
 		char separatingchar=',';
 		while(separatingchar==',') {
@@ -888,7 +906,7 @@ public class QueryParser {
 	}
 	
 	
-	public static JSONObject literalfuncParser() throws Exception{
+	public JSONObject literalfuncParser() throws Exception{
 		JSONObject column_object=new JSONObject();	
 		Pattern entitypattern=Pattern.compile(func_literalpattern);
 		Matcher matcher=entitypattern.matcher(query);
@@ -901,7 +919,7 @@ public class QueryParser {
 		return column_object;
 	}
 	
-	public static JSONObject entityfuncParser() throws Exception{
+	public JSONObject entityfuncParser() throws Exception{
 		JSONObject column_object=new JSONObject();	
 		Pattern entitypattern=Pattern.compile(func_entitypattern);
 		Matcher matcher=entitypattern.matcher(query);
