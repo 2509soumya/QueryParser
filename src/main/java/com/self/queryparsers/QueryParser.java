@@ -9,28 +9,38 @@ import org.json.JSONObject;
 public class QueryParser {
 	
 	public static String entity_regex="(?i)([\\w]+[.])?([\\w]+|[*])";
-	public static String literal_regex="(([\'][^\']*[\'])|([\"][^\"]*[\"])|([\\d]+))";
-	public static String arg_colalias="(?i)(([\\s]+AS[\\s]+[\\w]+)|([\\s]+[\\w]+)|([\\s]+[\"][\\w]+[\"])|([\\s]+[\'][\\w]+[\']))?";
-	public static String arg_select_pattern="(?i)([\\s]*[(]?SELECT[\\s]+)";
-	public static String func_pattern="([\\w]+)[(]";
+	public static String literal_regex="(([\'][^\']*[\'])|([\"][^\"]*[\"])|([-]?[\\d]+))";
+	public static String arg_colalias="(?i)(([\\s]+(?!AS)[\\w]+)|([\\s]+[\"][^\"]+[\"])|([\\s]+[\'][^\']+[\'])|([\\s]+AS[\\s]+(([\\w]+)|([\'][^\']+[\'])|([\"][^\"]+[\"]))))?";
+	public static String arg_select_pattern="(?i)([\\s]*[(]?[\\s]*(SELECT|SEL)[\\s]+)";
+	public static String func_pattern="([\\w]+)[\\s]*[(]";
+		
 	public static String func_entitypattern=entity_regex;
 	public static String func_literalpattern=literal_regex;
 	public static String func_argumentDelimiter="(?i)[\\s]*(([,])|[)])";
+	
 	public static String casewhen_regex="(?i)([\\s]*case[\\s]+when[\\s+])";
+	public static String casewhentype2_regex="(?i)([\\s]*case[\\s]+)";
+	
 	public static String when_regex="(?i)(when[\\s+])";
-	public static String expr_codeblock="([\\s]*)([(][^()]*[)])";
-	public static String select_pattern="(?i)([\\s]*SELECT[\\s]+)";
+	public static String expr_codeblock="([\\s]*)([(][^)]*[)])";
+	public static String select_pattern="(?i)([\\s]*(SELECT|SEL)[\\s]+)";
 	public static String argumentDelimiter="(?i)[\\s]*(([,])|(FROM))";
+	
 	public static String arithmeticop_regex="[*+-]|[/%]";
-	public static String bitwiseop_regex="[&|^]";
+	public static String bitwiseop_regex="[&\\|^]";
+	public static String otherop_regex="(\\|\\|)";
+	
+	public static String teradatadatatypes="(ARRAY(?![\\w]+)|VARRAY(?![\\w]+)|BYTE(?![\\w]+)|VARBYTE(?![\\w]+)|BLOB(?![\\w]+)|CHAR[(][\\d]*[)](?![\\w]+)|VARCHAR(?![\\w]+)|CLOB(?![\\w]+)|AVRO(?![\\w]+)|DATE(?![\\w]+)|TIME(?![\\w]+)|TIMESTAMP(?![\\w]+)|INTERVAL YEAR(?![\\w]+)|INTERVAL YEAR TO MONTH(?![\\w]+)|INTERVAL MONTH(?![\\w]+)|INTERVAL DAY(?![\\w]+)|INTERVAL DAY TO HOUR(?![\\w]+)|INTERVAL DAY TO MINUTE(?![\\w]+)|INTERVAL DAY TO SECOND(?![\\w]+)|INTERVAL HOUR(?![\\w]+)|INTERVAL HOUR TO MINUTE(?![\\w]+)|INTERVAL HOUR TO SECOND(?![\\w]+)|INTERVAL MINUTE(?![\\w]+)|INTERVAL MINUTE TO SECOND(?![\\w]+)|INTERVAL SECOND(?![\\w]+)|JSON(?![\\w]+)|BYTEINT(?![\\w]+)|SMALLINT(?![\\w]+)|INTEGER(?![\\w]+)|BIGINT(?![\\w]+)|DECIMAL([(][^()]*[)])|NUMERIC(?![\\w]+)|NUMBER(?![\\w]+)|PERIOD(?![\\w]+)|XML(?![\\w]+))";
 	public static String comparisonop_regex="(?i)(==|=|<>|>=|<=|>|<|ANY|BETWEEN|EXISTS|IN|LIKE|NOT|IS NOT|IS)";
 	public static String joiningop_regex="(?i)(AND|OR)[\\s]+";
 	public static String tableentity_regex="(?i)(([\\w]+[.])|([\\w-]+[.][\\w]+[.]))?([\\w]+)";
-	public static String joinregex="(?i)((INNER JOIN)|(OUTER JOIN)|(LEFT OUTER JOIN)|(RIGHT OUTER JOIN)|(LEFT JOIN)|(RIGHT JOIN))";
-	public static String keywordregex="(?i)(//bCURRENT_DATE//b|//bNOT NULL//b|//bNULL//b|[*])";
+	public static String joinregex="(?i)((INNER JOIN)|(OUTER JOIN)|(LEFT OUTER JOIN)|(RIGHT OUTER JOIN)|(LEFT JOIN)|(RIGHT JOIN)|(JOIN)|(FULL OUTER JOIN))";
+	public static String keywordregex="(?i)(CURRENT_DATE(?![\\w]+)|CURRENT_TIME(?![\\w]+)|CURRENT_TIMESTAMP(?![\\w]+)|NOT NULL(?![\\w]+)|NULL(?![\\w]+)|FLOAT(?![\\w]+)|[*])";
 	public static String aggregateregex="(?i)((GROUP BY)|(ORDER BY))";
 	public static String unionregex="(?i)((UNION)|(UNION ALL))";
 	public static String aggregateProjection="(?i)((DISTINCT)|(TOP[\\s]+[0-9]+))[\\s]+";
+	public static String dateKeywords="(?i)(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)";
+	public static String intervalregex=String.format("(?i)(INTERVAL)[\\s]+([\'][^\']+[\'])[\\s]+((%s[\\s]+TO[\\s]+%<s)|(%<s))", dateKeywords);
 
 	//public static String query="SELECT sales.* FROM product LEFT OUTER JOIN sales ON product_key = sales_product_key WHERE quantity > 10 AND product_name LIKE 'French%'";
 	
@@ -64,6 +74,7 @@ public class QueryParser {
 		if(query.length()>0) {
 			System.out.println("Query Parsing failed !!!");
 			responseobject.put("message", "Query Parsing failed !!!");
+			responseobject.put("parsedobject", finaljsonarr);
 			responseobject.put("parseduntil", query);
 		}else {
 			System.out.println("Query Parsing succeeded !!!");
@@ -161,16 +172,20 @@ public class QueryParser {
 			System.out.println(query);
 			//aggregation projection
 			JSONArray aggprojobj=new JSONArray();
+			JSONArray tabsArray=new JSONArray();
+			JSONArray predicateArray=new JSONArray();
+			JSONArray aggobj=new JSONArray();
+			
 			aggprojobj=aggregateProjection(aggprojobj);
 			
 			//extract columns
 			JSONArray colsArray=projectionParser();
 			//extract table conditions
-			JSONArray tabsArray=tablejoinParser();
-			//extract filter conditions if any
-			JSONArray predicateArray=predicateParser();
-			//extract agg conditions if any
-			JSONArray aggobj=new JSONArray();
+			if(query.matches("(?i)(FROM)"+"(.*)")) {
+				 tabsArray=tablejoinParser();
+			}
+			predicateArray=predicateParser();
+			
 			JSONObject groupobj=aggregateParser("(?i)(GROUP BY)");
 			if(!groupobj.isEmpty()) {
 				aggobj.put(groupobj);
@@ -179,11 +194,14 @@ public class QueryParser {
 			if(!orderobj.isEmpty()) {
 				aggobj.put(orderobj);
 			}
-			selecttree.put("columnaggregate", aggprojobj);
+			
 			selecttree.put("columns", colsArray);
 			selecttree.put("tables", tabsArray);
 			selecttree.put("predicates", predicateArray);
 			selecttree.put("aggregates", aggobj);
+			selecttree.put("columnaggregate", aggprojobj);
+
+
 			System.out.println("Final remaining query: "+query);
 			
 		}else {
@@ -308,6 +326,16 @@ public class QueryParser {
 		selection_object.put(tabobj);
 		
 		query=query.trim();
+		
+		String jointype="";
+		
+		if(query.matches(joinregex+"(.*)")){
+			jointype="key";
+		}else if(query.matches("^[,]"+"(.*)")){
+			jointype="comma";
+		}
+		
+		if(jointype.equalsIgnoreCase("key")) {
 		while(query.matches(joinregex+"(.*)")) {
 			JSONObject joinblock=new JSONObject();
 			JSONObject joinobj=new JSONObject();
@@ -332,6 +360,16 @@ public class QueryParser {
 				joinblock.put("ON",conditionexpr_obj);
 			}
 			selection_object.put(joinblock);
+		}
+		}else if(jointype.equalsIgnoreCase("comma")) {
+			while(query.matches("^[,]"+"(.*)")) {
+				JSONObject joinblock=new JSONObject();
+				query=query.replaceFirst("^[,]", "");
+				joinblock.put("FROM",tableParser());
+				joinblock.put("KEY",",");
+				selection_object.put(joinblock);
+				query=query.trim();
+			}
 		}
 		
 		return selection_object;
@@ -444,12 +482,13 @@ public class QueryParser {
 		JSONArray exprobj=new JSONArray();
 		JSONObject columndef_object=new JSONObject();
 		
+		/*
 		boolean openingbrac=false;
 		if(query.startsWith("(")){
 			System.out.println("replacing opening paran");
 			query=query.replaceFirst("[(]", "");
 			openingbrac=true;
-		}
+		}*/
 		
 		exprobj=expressionParser(exprobj);
 		
@@ -486,6 +525,11 @@ public class QueryParser {
 				dttype_obj.put("keyword", "DATE");
 				finalexpr.put("datatype", dttype_obj);
 				query=query.replaceFirst("^(?i)DATE", "");
+			}else if(query.matches("(?)FLOAT" + "(.*)")) {
+				JSONObject dttype_obj=new JSONObject();
+				dttype_obj.put("keyword", "FLOAT");
+				finalexpr.put("datatype", dttype_obj);
+				query=query.replaceFirst("^(?i)FLOAT", "");
 			}else {
 				throw new Exception("Cast datatype not recognized");
 			}
@@ -509,9 +553,10 @@ public class QueryParser {
 		
 		query=query.trim();
 		
+		/*
 		if(openingbrac && query.charAt(0)==')') {
 			query=query.replaceFirst("[)]", "");
-		}
+		}*/
 		
 		query=query.trim();
 	
@@ -523,6 +568,7 @@ public class QueryParser {
 			Pattern colalias_pattern=Pattern.compile("^"+arg_colalias);
 			Matcher alias_matcher=colalias_pattern.matcher(query);
 			if (alias_matcher.find()) {
+				System.out.println("Alias group: "+alias_matcher.group());
 				String alias=alias_matcher.group().replaceFirst("^(?i)[\\s]*AS[\\s]*", "").trim();
 				System.out.println("Matched alias: "+alias);
 				
@@ -556,20 +602,129 @@ public class QueryParser {
 		}
 	}
 	
+	public JSONObject intervalfuncParser() {
+		query=query.trim();
+		JSONObject obj_interval=new JSONObject();
+
+		Pattern p=Pattern.compile("^"+intervalregex);
+		Matcher m=p.matcher(query);
+        while(m.find()) {
+        	String date_expression=m.group(2);
+        	String conversionkeyword=m.group(3);
+        	obj_interval.put("datexpression", date_expression);
+        	obj_interval.put("conversionkey", conversionkeyword);
+        	query=query.replaceFirst(intervalregex, "");
+        }
+        return obj_interval;
+	}
+	
+	public JSONObject extractParser() throws Exception {
+		query=query.trim();
+		JSONObject extractobj=new JSONObject();
+		if(query.matches("^(?i)EXTRACT[(]"+"(.*)")) {
+			query=query.replaceFirst("^(?i)EXTRACT[(]", "");
+			query=query.trim();
+			
+		}
+		String keywordregex="^(?i)(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)"+"[\\s]+";
+		Pattern p=Pattern.compile(keywordregex);
+		Matcher m=p.matcher(query);
+		if(m.find()) {
+			String datekeyword=m.group(1);
+			query=query.replaceFirst(keywordregex, "");
+			extractobj.put("datekeyword", datekeyword);
+		}		
+		query=query.trim();
+		query=query.replaceFirst("^(?i)FROM[\\s]+", "");
+		JSONArray expr_object=new JSONArray();
+		expr_object=expressionParser(expr_object);
+		extractobj.put("dateexpression", expr_object);
+		query=query.trim();
+		query=query.replaceFirst("^[)]", "");
+		return extractobj;
+	}
+	
+	public void formatAndDatatypeParser(JSONObject operand_object) {
+		query=query.trim();
+		String formatdatatyperegex="^(?i)([(]FORMAT[\\s]+([\'][^\']+[\'])[\\s]*[)])?[\\s]*([(]"+teradatadatatypes+"[)])?";				
+		Pattern p=Pattern.compile(formatdatatyperegex);
+		Matcher m=p.matcher(query);
+		if(query.matches(formatdatatyperegex + "(.*)") && m.find()) {
+			String formattedstring=m.group(2);
+			String datatype=m.group(4);
+			if(formattedstring!=null) {
+				operand_object.put("format", formattedstring);
+			}
+			if(datatype!=null) {
+				operand_object.put("castdatatype", datatype);
+			}
+			query=query.replaceFirst(formatdatatyperegex, "");
+			query=query.trim();
+		}
+	}
+	
+	public void formatAndDatatype2Parser(JSONObject operand_object) {
+		query=query.trim();
+		String formatdatatyperegex="^(?i)[(]("+teradatadatatypes+"),"+"[\\s]*FORMAT[\\s]+([\'][^\']+[\'])"+"[\\s]*[)]";				
+		Pattern p=Pattern.compile(formatdatatyperegex);
+		Matcher m=p.matcher(query);
+		if(query.matches(formatdatatyperegex + "(.*)") && m.find()) {
+			String formattedstring=m.group(4);
+			String datatype=m.group(2);
+			if(formattedstring!=null) {
+				operand_object.put("format", formattedstring);
+			}
+			if(datatype!=null) {
+				operand_object.put("castdatatype", datatype);
+			}
+			query=query.replaceFirst(formatdatatyperegex, "");
+			query=query.trim();
+		}
+	}
+	
+	
+	public void namedExpressionParser(JSONObject operand_object) {
+		query=query.trim();
+        String namedexprregex="(?i)[(](NAMED[\\s]+([\\w]+))[)]";
+        
+        if(query.matches(namedexprregex + "(.*)")){
+        Pattern p=Pattern.compile(namedexprregex);
+		Matcher m=p.matcher(query);
+		if(m.find()) {
+			String namedalias=m.group(2);
+			if(namedalias!=null) {
+				operand_object.put("namedalias", namedalias);
+			}
+			query=query.replaceFirst(namedexprregex, "");
+			query=query.trim();
+		}
+       }
+	}
+	
 	
 	public JSONArray expressionParser(JSONArray expr_object) throws Exception{
 		query=query.trim();
 		
 		System.out.println("Query for expression parser:"+query);
 		
-		String operator_regex="[\\s]*("+arithmeticop_regex+"|"+bitwiseop_regex+")";		
+		String operator_regex="[\\s]*("+arithmeticop_regex+"|"+otherop_regex+"|"+bitwiseop_regex+")";		
 		JSONObject operand_object=new JSONObject();
-		if(query.matches(keywordregex+ "(.*)")) {
+		if(query.matches(intervalregex + "(.*)")) {
+			System.out.println("expr: intervalfunc");
+			operand_object.put("type", "intervalexpression");
+			operand_object.put("def", intervalfuncParser());
+		}
+		else if(query.matches(keywordregex+ "(.*)")) {
 			System.out.println("expr: keyword");
 			operand_object.put("type", "keyword");
 			operand_object.put("def", keywordParser());
 		}
-		else if(query.matches(func_pattern + "(.*)")){
+		else if(query.matches("^(?i)EXTRACT[(]"+"(.*)")) {
+			System.out.println("expr: Extract");
+			operand_object.put("type", "extractfunc");
+			operand_object.put("def", extractParser());
+		}
+		else if(query.matches(func_pattern + "(.*)") && !query.matches("[\\w]+[(]"+teradatadatatypes+"[)]"+"(.*)") && !query.matches("[\\w]+[(]"+"((?i)FORMAT[\\s]+[\'][^\']+[\'])[\\s]*"+"[)]"+"(.*)")){
 			System.out.println("expr: function");
 			operand_object.put("type", "function");
 			operand_object.put("def", funcParser("nested"));
@@ -585,15 +740,24 @@ public class QueryParser {
 			}else {
 				throw new Exception("Failed while parsing nested expression");
 			}
+			System.out.println("Inside expression parser after query replace:");
+			System.out.println(query);
 		}
 		else if(query.matches(casewhen_regex+"(.*)")) {
 			System.out.println("expr: case when column");
 			operand_object.put("type", "case_when");
 			operand_object.put("def", caseWhenParser());
 		}
+		//check for casewhentype 2
+		else if(query.matches(casewhentype2_regex+"(.*)")) {
+			System.out.println("expr: case whentype2 column");
+			operand_object.put("type", "case_when");
+			operand_object.put("def", caseWhenType2Parser());
+		}
 		else if(query.matches(arg_select_pattern+"(.*)")) {
 			System.out.println("expr: select column");
 			//nested select
+			query=query.trim();
 			boolean isParan=false;
 			if(query.charAt(0)=='(') {
 				query=query.substring(1, query.length());
@@ -601,7 +765,7 @@ public class QueryParser {
 			}
 			operand_object.put("type", "selectentity");
 			operand_object.put("def", selectWithUnionParser());
-			
+			System.out.println("isParan: "+isParan +" first char: "+query.charAt(0));
 			if(isParan && query.charAt(0)==')') {
 				query=query.substring(1, query.length());
 			}
@@ -619,18 +783,34 @@ public class QueryParser {
 			System.out.println("Else in expression parser: "+query);
 			throw new Exception("No expr match");
 		}
-		
 		operand_object.put("expr_type", "operand");
-
-		expr_object.put(operand_object);		
+		
+		//check for format and datatype conv
+		query=query.trim();
 		System.out.println(query);
 		System.out.println(expr_object.toString());
+		
+		System.out.println("Calling namedexpression parser");
+		namedExpressionParser(operand_object);
+		
+		System.out.println("Calling formatdatatype parser");
+		formatAndDatatypeParser(operand_object);
+		formatAndDatatype2Parser(operand_object);
+		expr_object.put(operand_object);	
+		
+		System.out.println(query);
+		System.out.println(expr_object.toString());
+
 		
 		JSONObject operator_object=new JSONObject();
 		Pattern op_pattern=Pattern.compile("^"+operator_regex+"(.*)");
 		Matcher op_matcher=op_pattern.matcher(query);
 		if (op_matcher.find()) {
 			String operator=op_matcher.group(1);
+			
+			
+			System.out.println("Matched query with operator match "+operator);
+			
 			operator_object.put("expr_type", "operator");
 			operator_object.put("operator",operator);
 			expr_object.put(operator_object);
@@ -644,14 +824,27 @@ public class QueryParser {
 	
 	public JSONArray conditionParser(JSONArray conditionobj) throws Exception{
 		query=query.trim();
+		
+		System.out.println("Inside conditional parser");
+		System.out.println("Query: "+query);
+		if(query.startsWith("(")) {
+			System.out.println("Nested conditional expression");
+			query=query.replaceFirst("^[(]", "");
+			JSONArray nestcondtnobj=new JSONArray();
+			nestcondtnobj=conditionParser(nestcondtnobj);
+			JSONObject nestedcondt=new JSONObject();
+			nestedcondt.put("nestedcondtnobj", nestcondtnobj);
+			conditionobj.put(nestedcondt);
+			query=query.replaceFirst("^[)]", "");
+			System.out.println("Nested conditional ended");
+		}
+		else {
+			
 		JSONArray exprobj=new JSONArray();		
 		JSONObject condition_operandobject=new JSONObject();	
 		condition_operandobject.put("expr_type", "operand");
 		condition_operandobject.put("expression", expressionParser(exprobj));
-		
 		query=query.trim();
-		
-		
 		JSONObject condition_operator_object=new JSONObject();
 		Pattern oprtr_pattern=Pattern.compile("^"+comparisonop_regex+"(.*)");
 		Matcher oprtr_matcher=oprtr_pattern.matcher(query);
@@ -664,18 +857,13 @@ public class QueryParser {
 		}else {
 			throw new Exception("Invalid conditional expression");
 		}
-		
-		query=query.trim();
-		
+		query=query.trim();		
 		JSONObject condition_operand2object=new JSONObject();
-		//right operand parsing
 		if(operator.equalsIgnoreCase("in")) {	
 		   if(query.startsWith("(")) {
 			   query=query.replaceFirst("[(]", "");
 			   JSONArray arg_obj=new JSONArray();
-			   
 			   if(query.matches(arg_select_pattern+"(.*)")) {
-					//nested select
 					arg_obj.put(selectWithUnionParser());
 				}else {
 					   query=","+query;
@@ -695,42 +883,54 @@ public class QueryParser {
 			   }else {
 				   throw new Exception("like operator issue");
 			   }
-			   
 			   condition_operand2object.put("type", "selectentity");
 			   condition_operand2object.put("expr_type", "operand");
 			   condition_operand2object.put("expression", arg_obj);
 		   }else {
 			   throw new Exception("in operator issue");
 		   }
+		}else if(operator.equalsIgnoreCase("between")){
+			System.out.println("Inside condition operator BETWEEN");
+			JSONObject betweenoperand1=new JSONObject();
+			JSONArray expr1obj=new JSONArray();
+			betweenoperand1.put("expr_type", "operand");
+			betweenoperand1.put("expression", expressionParser(expr1obj));
+			System.out.println("Parsed operand1 in between : "+query);
+			query=query.trim();
+			if(query.matches("^(?i)AND[\\s]+"+"(.*)")) {
+				query=query.replaceFirst("^(?i)AND[\\s]+", "");
+			}
+			JSONObject betweenoperand2=new JSONObject();
+			JSONArray expr2obj=new JSONArray();
+			betweenoperand2.put("expr_type", "operand");
+			betweenoperand2.put("expression", expressionParser(expr2obj));		
+			System.out.println("Parsed operand2 in between");
+			condition_operand2object.put("operand1", betweenoperand1);
+			condition_operand2object.put("operand2", betweenoperand2);
+			query=query.trim();
 		}else {
 			JSONArray expr1obj=new JSONArray();		
 			condition_operand2object.put("expr_type", "operand");
 			condition_operand2object.put("expression", expressionParser(expr1obj));
 		}
-
-		
 		conditionobj.put(condition_operandobject);
 		conditionobj.put(condition_operator_object);
 		conditionobj.put(condition_operand2object);
-
-		query=query.trim();
-		
-		   System.out.println("Query at this point: "+ query);
+		}
+		query=query.trim();		
+	    System.out.println("Query at this point: "+ query);
 
 		   
 		if(query.matches("^"+joiningop_regex+"(.*)")) {
 			Pattern joiningoprtr_pattern=Pattern.compile(joiningop_regex);
 			Matcher joiningoprtr_matcher=joiningoprtr_pattern.matcher(query);
 			JSONObject joincondition_operator_object=new JSONObject();
-					
 			if (joiningoprtr_matcher.find()) {
 				System.out.println("Inside joining matcher");
 				String joining_operator=joiningoprtr_matcher.group(1);
 				joincondition_operator_object.put("expr_type", "operator");
 				joincondition_operator_object.put("operator",joining_operator);
-				
 				conditionobj.put(joincondition_operator_object);
-				
 				query=query.replaceFirst(joiningop_regex, "");
 				return conditionParser(conditionobj);
 			}else {
@@ -768,10 +968,8 @@ public class QueryParser {
 		JSONArray casewhenexpr=new JSONArray();
 		System.out.println("Begin query: "+query);
 		if(query.matches(casewhen_regex+"(.*)")) {
-			
 			query=query.replaceFirst("(?i)case[\\s]+", "");
 			System.out.println("After case query: "+query);
-
 			while(query.matches(when_regex+"(.*)")) {
 				JSONObject caseobj=new JSONObject();
 				query=query.replaceFirst(when_regex, "");				
@@ -784,7 +982,6 @@ public class QueryParser {
 				if(query.matches("(?i)(then)[\\s]+"+"(.*)")){
 					query=query.replaceFirst("(?i)(then)[\\s]+","");
 				}
-				
 				System.out.println("After then  query: "+query);				
 				JSONArray thenexpr_obj=new JSONArray();
 				thenexpr_obj=expressionParser(thenexpr_obj);				
@@ -792,7 +989,6 @@ public class QueryParser {
 				casewhenexpr.put(caseobj);
 				query=query.trim();
 				}
-			
 			query=query.trim();
 			if(query.matches("(?i)(else)[\\s]+"+"(.*)")){
 				query=query.replaceFirst("(?i)(else)[\\s]+","");
@@ -803,10 +999,7 @@ public class QueryParser {
 				elseexpr_obj=expressionParser(elseexpr_obj);
 				elseobj.put("else", elseexpr_obj);
 				casewhenexpr.put(elseobj);
-			}else {
-				throw new Exception("Parsed until : "+query);
 			}
-			
 			query=query.trim();
 			if(query.matches("(?i)(end)"+"(.*)")){
 				query=query.replaceFirst("(?i)(end)","");
@@ -818,6 +1011,65 @@ public class QueryParser {
 	}
 	
 	
+	public JSONArray caseWhenType2Parser() throws Exception{
+		JSONArray casewhenexpr=new JSONArray();
+		System.out.println("Begin query: "+query);
+		if(query.matches(casewhentype2_regex+"(.*)")) {
+			query=query.replaceFirst("(?i)case[\\s]+", "");
+			JSONArray whenexpr_obj=new JSONArray();
+			whenexpr_obj=expressionParser(whenexpr_obj);
+			while(query.matches(when_regex+"(.*)")) {
+				JSONObject caseobj=new JSONObject();
+				query=query.replaceFirst(when_regex, "");	
+				JSONArray thencondtn_obj=new JSONArray();
+				thencondtn_obj=expressionParser(thencondtn_obj);
+				query=query.trim();
+				if(query.matches("(?i)(then)[\\s]+"+"(.*)")){
+					query=query.replaceFirst("(?i)(then)[\\s]+","");
+				}
+				JSONArray thenexpr_obj=new JSONArray();
+				thenexpr_obj=expressionParser(thenexpr_obj);
+				
+				JSONArray conditionalarr=new JSONArray();
+				JSONObject condtnop1=new JSONObject();
+				condtnop1.put("expression",whenexpr_obj);
+				condtnop1.put("expr_type","operand");
+				JSONObject condtnoper=new JSONObject();
+				condtnoper.put("operator","=");
+				condtnoper.put("expr_type","operator");				
+				JSONObject condtnop2=new JSONObject();
+				condtnop2.put("expression",thencondtn_obj);
+				condtnop2.put("expr_type","operand");
+				conditionalarr.put(condtnop1);
+				conditionalarr.put(condtnoper);
+				conditionalarr.put(condtnop2);
+				
+				caseobj.put("when", conditionalarr);
+				caseobj.put("then", thenexpr_obj);
+				casewhenexpr.put(caseobj);
+				query=query.trim();
+			}
+			query=query.trim();
+			if(query.matches("(?i)(else)[\\s]+"+"(.*)")){
+				query=query.replaceFirst("(?i)(else)[\\s]+","");
+				query=query.trim();
+				System.out.println("After else  query: "+query);
+				JSONObject elseobj=new JSONObject();
+				JSONArray elseexpr_obj=new JSONArray();
+				elseexpr_obj=expressionParser(elseexpr_obj);
+				elseobj.put("else", elseexpr_obj);
+				casewhenexpr.put(elseobj);
+			}
+			query=query.trim();
+			if(query.matches("(?i)(end)"+"(.*)")){
+				query=query.replaceFirst("(?i)(end)","");
+			}else {
+				throw new Exception("Parsed until : "+query);
+			}
+		}
+		return casewhenexpr;
+	}
+	
 	
 	public JSONArray castParser() throws Exception{
 		JSONObject finalexpr=new JSONObject();
@@ -826,20 +1078,25 @@ public class QueryParser {
 		expressionParser(exprobj);
 		finalexpr.put("expression", exprobj);
 		
-		System.out.println("Outside Expression Parser in cast:"+query);
+		
 		query=query.replaceFirst("^(?i)[\\s]*AS[\\s]+", "");
 		
-		if(query.matches(func_pattern + "(.*)")) {
-			JSONObject dttype_obj=funcParser("nested");
-			finalexpr.put("datatype", dttype_obj);
-		}else if(query.matches("(?)DATE" + "(.*)")) {
+		System.out.println("Outside Expression Parser in cast:"+query);
+		
+		if(query.matches(teradatadatatypes+"(.*)")) {
 			JSONObject dttype_obj=new JSONObject();
-			dttype_obj.put("keyword", "DATE");
-			finalexpr.put("datatype", dttype_obj);
-			query=query.replaceFirst("^(?i)DATE", "");
+	        Pattern p=Pattern.compile(teradatadatatypes);
+			Matcher m=p.matcher(query);
+			if(m.find()) {
+				String datatype=m.group();
+				dttype_obj.put("keyword", datatype);
+				finalexpr.put("datatype", dttype_obj);
+				query=query.replaceFirst("^(?i)"+teradatadatatypes, "");
+			}
 		}else {
 			throw new Exception("Cast datatype not recognized");
 		}
+		System.out.println("After datatype Parser in cast:"+query);
 		
 		query=query.replaceFirst("[)]", "");
         System.out.println("Before alias matching "+query);
@@ -885,16 +1142,28 @@ public class QueryParser {
 	public JSONArray func_argumentParser(String functionname) throws Exception{
 		JSONArray argsArray=new JSONArray();
 		char separatingchar=',';
+		int argcount=0;
 		while(separatingchar==',') {
 			JSONArray arg_object=new JSONArray();
 			query=query.trim();
 			arg_object=expressionParser(arg_object);
 			query=query.trim();
+			
+			//handling for substring type2
+			if(functionname.equalsIgnoreCase("SUBSTRING") && argcount==0 && query.matches("(?i)FROM[\\s]+"+"(.*)")) {
+				query=query.replaceFirst("(?i)FROM[\\s]+", "");
+				query=","+query;
+			}else if(functionname.equalsIgnoreCase("SUBSTRING") && argcount==1 && query.matches("(?i)FOR[\\s]+"+"(.*)")) {
+				query=query.replaceFirst("(?i)FOR[\\s]+", "");
+				query=","+query;
+			}
+			
 			separatingchar=query.charAt(0);
 			if(separatingchar==',') {
 				query=query.substring(1, query.length());
 			}
 			argsArray.put(arg_object);
+			argcount++;
 		}
 		if(query.indexOf(')')==0) {
 			query=query.substring(1, query.length());
